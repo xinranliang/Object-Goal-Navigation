@@ -53,6 +53,15 @@ coco_categories = {
     "bottle": 14
 }
 
+coco_categories_label = {
+    "chair": 0,
+    "couch": 1,
+    "potted plant": 2,
+    "bed": 3,
+    "toilet": 4,
+    "tv": 5
+}
+
 coco_categories_mapping = {
     56: 0,  # chair
     57: 1,  # couch

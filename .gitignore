@@ -142,3 +142,4 @@ tmp/
 pretrained_models/
 data/
 data
+logs/

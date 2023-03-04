@@ -6,10 +6,16 @@ import gym
 import numpy as np
 import quaternion
 import skimage.morphology
+import os
+import pickle
+from PIL import Image
 import habitat
+import detectron2
+import pycocotools
+from detectron2.structures import BoxMode
 
 from envs.utils.fmm_planner import FMMPlanner
-from constants import coco_categories
+from constants import coco_categories, coco_categories_label
 import envs.utils.pose as pu
 
 
@@ -34,8 +40,8 @@ def print_scene_objects(sim):
                 f" center:{obj.aabb.center}, dims:{obj.aabb.sizes}"
             )
         obj_class = obj.category.name()
-        if obj_class in coco_categories.keys():
-            cat_id = coco_categories[obj_class]
+        if obj_class in coco_categories_label.keys():
+            cat_id = coco_categories_label[obj_class]
             obj_id = int(obj.id.split("_")[-1])
             if cat_id not in category_instance_lists:
                 category_instance_lists[cat_id] = [obj_id]
@@ -50,6 +56,34 @@ def print_scene_objects(sim):
 
     # input("Press Enter to continue...")
     return category_instance_lists, instance_category_lists
+
+
+def area_filter(mask, bounding_box, img_height, img_width, size_tol=0.05):
+    """
+    Function to filter out masks that contain sparse instances
+    for example:
+        0 0 0 0 0 0
+        1 0 0 0 0 0
+        1 0 0 0 1 0    This is a sparse mask
+        0 0 0 0 1 0
+        0 0 0 0 0 0
+        0 0 0 0 0 0
+        1 1 1 1 1 0
+        1 1 1 1 1 1    This is not a sparse mask
+        0 0 0 1 1 1
+        0 0 0 0 0 0
+    """
+    xmin, ymin, xmax, ymax = bounding_box
+    num_positive_pixels = np.sum(mask[ymin:ymax, xmin:xmax])
+    num_total_pixels = (xmax - xmin) * (ymax - ymin)
+    big_enough = (xmax - xmin) >= size_tol * img_width and (
+        ymax - ymin
+    ) >= size_tol * img_height
+    if big_enough:
+        not_sparse = num_positive_pixels / num_total_pixels >= 0.3
+    else:
+        not_sparse = False
+    return not_sparse and big_enough
 
 
 class ObjectGoal_Env(habitat.RLEnv):
@@ -115,6 +149,7 @@ class ObjectGoal_Env(habitat.RLEnv):
         self.info['success'] = None
 
         self.category_instance_lists, self.instance_category_lists = print_scene_objects(self._env.sim._sim)
+        self.num_viz = 0
 
     def load_new_episode(self):
         """The function loads a fixed episode from the episode dataset. This
@@ -426,6 +461,10 @@ class ObjectGoal_Env(habitat.RLEnv):
         self.timestep += 1
         self.info['time'] = self.timestep
 
+        if np.random.uniform() <= 0.5:
+            save_dir = "/home/xinranliang/projects/sem-exp/logs/2023-03-04/eval_pretrain/rollouts"
+            self.save_obs(rgb, semantic, self.scene_name.split("/")[-1].split(".")[0], save_dir)
+
         return state, rew, done, self.info
 
     def get_reward_range(self):
@@ -505,3 +544,65 @@ class ObjectGoal_Env(habitat.RLEnv):
             curr_sim_pose, self.last_sim_location)
         self.last_sim_location = curr_sim_pose
         return dx, dy, do
+    
+    def save_obs(self, obs_rgb, obs_semantic, scene_str, save_dir):
+        save_dir = os.path.join(save_dir, scene_str)
+        os.makedirs(save_dir, exist_ok=True)
+        os.makedirs(os.path.join(save_dir, "rgb"), exist_ok=True)
+        os.makedirs(os.path.join(save_dir, "dict"), exist_ok=True)
+
+        # at single timestep
+        record = {}
+        # process one hot encode version
+        max_inst_id = max(list(self.instance_category_lists.keys()))
+        seg_obs_one_hot = np.arange(max_inst_id + 1) # shape: (max(instance_id) + 1) x height x width
+        seg_obs_one_hot = (seg_obs_one_hot[:, np.newaxis, np.newaxis] == obs_semantic).astype(int)
+
+        idx = "%s_%03d" % (scene_str, self.num_viz)
+        record["file_name"] = os.path.join(save_dir, "rgb", "{}.png".format(idx))
+        record["image_id"] = idx
+        record["height"] = self.args.frame_height
+        record["width"] = self.args.frame_width
+
+        # save RGB
+        color_img = Image.fromarray(obs_rgb, mode="RGB")
+        color_img.save(record["file_name"])
+
+        objs = []
+
+        for instance_id in list(self.instance_category_lists.keys()):
+
+            # query one hot vector as object mask
+            obj_mask = seg_obs_one_hot[instance_id]
+            # get object mask
+            # select bounding box numbers
+            nonzero_index = np.argwhere(obj_mask == 1)
+
+            # nontrivial object mask
+            if nonzero_index.shape[0] > 0:
+
+                # query category of object
+                category = self.instance_category_lists[instance_id]
+
+                py_min, px_min = tuple(np.amin(nonzero_index, axis=0))
+                py_max, px_max = tuple(np.amax(nonzero_index, axis=0))
+                
+                obj = {
+                        "bbox": [px_min, py_min, px_max, py_max],
+                        "bbox_mode": BoxMode.XYXY_ABS,
+                        "segmentation": pycocotools.mask.encode(np.asarray(obj_mask, order="F").astype('uint8')),
+                        "category_id": category,
+                        }
+                
+                filter_obj = area_filter(obj_mask, obj['bbox'], self.args.frame_height, self.args.frame_width)
+                if filter_obj:
+                    objs.append(obj)
+            
+        record["annotations"] = objs
+
+        # save label
+        with open(os.path.join(save_dir, "dict", "{}.pkl".format(idx)), "wb") as f:
+            pickle.dump(record, f)
+            f.close()
+
+        self.num_viz += 1
