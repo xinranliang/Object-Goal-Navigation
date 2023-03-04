@@ -462,7 +462,7 @@ class ObjectGoal_Env(habitat.RLEnv):
         self.info['time'] = self.timestep
 
         if np.random.uniform() <= 0.5:
-            save_dir = "/home/xinranliang/projects/sem-exp/logs/2023-03-04/eval_pretrain/rollouts"
+            save_dir = os.path.join("/home/xinranliang/projects/sem-exp/logs", self.args.exp_name)
             self.save_obs(rgb, semantic, self.scene_name.split("/")[-1].split(".")[0], save_dir)
 
         return state, rew, done, self.info
@@ -558,8 +558,9 @@ class ObjectGoal_Env(habitat.RLEnv):
         seg_obs_one_hot = np.arange(max_inst_id + 1) # shape: (max(instance_id) + 1) x height x width
         seg_obs_one_hot = (seg_obs_one_hot[:, np.newaxis, np.newaxis] == obs_semantic).astype(int)
 
-        idx = "%s_%03d" % (scene_str, self.num_viz)
-        record["file_name"] = os.path.join(save_dir, "rgb", "{}.png".format(idx))
+        idx = "%s_ep%02d_t%03d_num%05d" % (scene_str, self.episode_no, self.timestep, self.num_viz)
+        file_index = "ep%02d_t%03d_num%05d" % (self.episode_no, self.timestep, self.num_viz)
+        record["file_name"] = os.path.join(save_dir, "rgb", "{}.png".format(file_index)
         record["image_id"] = idx
         record["height"] = self.args.frame_height
         record["width"] = self.args.frame_width
@@ -601,7 +602,7 @@ class ObjectGoal_Env(habitat.RLEnv):
         record["annotations"] = objs
 
         # save label
-        with open(os.path.join(save_dir, "dict", "{}.pkl".format(idx)), "wb") as f:
+        with open(os.path.join(save_dir, "dict", "{}.pkl".format(file_index), "wb") as f:
             pickle.dump(record, f)
             f.close()
 

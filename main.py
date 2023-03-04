@@ -2,6 +2,7 @@ from collections import deque, defaultdict
 import os
 import logging
 import time
+from datetime import datetime
 import json
 import gym
 import torch.nn as nn
@@ -19,6 +20,12 @@ os.environ["OMP_NUM_THREADS"] = "1"
 
 def main():
     args = get_args()
+    args.seed = (
+            os.getpid()
+            + int(datetime.now().strftime("%S%f"))
+            + int.from_bytes(os.urandom(2), "big")
+        )
+    print("Using a generated random seed {}".format(args.seed))
 
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
