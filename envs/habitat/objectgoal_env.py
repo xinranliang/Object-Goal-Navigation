@@ -13,6 +13,45 @@ from constants import coco_categories
 import envs.utils.pose as pu
 
 
+def print_scene_objects(sim):
+    scene = sim.semantic_scene
+
+    # key: category_id as specified in coco_categories
+    #      "15" is for background
+    # values: list of instance_id falling into this category_id
+    category_instance_lists = {}
+
+    # key: instance_id
+    # value: category_id as specified in coco_categories
+    #        "6" is for background
+    instance_category_lists = {}
+
+    for obj in scene.objects:
+        if obj is None or obj.category is None:
+            continue
+        print(
+                f"Object id:{obj.id}, category:{obj.category.name()},"
+                f" center:{obj.aabb.center}, dims:{obj.aabb.sizes}"
+            )
+        obj_class = obj.category.name()
+        if obj_class in coco_categories.keys():
+            cat_id = coco_categories[obj_class]
+            obj_id = int(obj.id.split("_")[-1])
+            if cat_id not in category_instance_lists:
+                category_instance_lists[cat_id] = [obj_id]
+            else:
+                category_instance_lists[cat_id].append(obj_id)
+            if obj_id not in instance_category_lists:
+                instance_category_lists[obj_id] = cat_id
+    
+    print(category_instance_lists)
+    print(instance_category_lists)
+    # try to compute bounding box
+
+    # input("Press Enter to continue...")
+    return category_instance_lists, instance_category_lists
+
+
 class ObjectGoal_Env(habitat.RLEnv):
     """The Object Goal Navigation environment class. The class is responsible
     for loading the dataset, generating episodes, and computing evaluation
@@ -74,6 +113,8 @@ class ObjectGoal_Env(habitat.RLEnv):
         self.info['distance_to_goal'] = None
         self.info['spl'] = None
         self.info['success'] = None
+
+        self.category_instance_lists, self.instance_category_lists = print_scene_objects(self._env.sim._sim)
 
     def load_new_episode(self):
         """The function loads a fixed episode from the episode dataset. This
@@ -379,6 +420,7 @@ class ObjectGoal_Env(habitat.RLEnv):
 
         rgb = obs['rgb'].astype(np.uint8)
         depth = obs['depth']
+        semantic = obs['semantic']
         state = np.concatenate((rgb, depth), axis=2).transpose(2, 0, 1)
 
         self.timestep += 1
