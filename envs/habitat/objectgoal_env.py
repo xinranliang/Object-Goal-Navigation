@@ -560,7 +560,7 @@ class ObjectGoal_Env(habitat.RLEnv):
 
         idx = "%s_ep%02d_t%03d_num%05d" % (scene_str, self.episode_no, self.timestep, self.num_viz)
         file_index = "ep%02d_t%03d_num%05d" % (self.episode_no, self.timestep, self.num_viz)
-        record["file_name"] = os.path.join(save_dir, "rgb", "{}.png".format(file_index)
+        record["file_name"] = os.path.join(save_dir, "rgb", "{}.png".format(file_index))
         record["image_id"] = idx
         record["height"] = self.args.frame_height
         record["width"] = self.args.frame_width
@@ -602,7 +602,7 @@ class ObjectGoal_Env(habitat.RLEnv):
         record["annotations"] = objs
 
         # save label
-        with open(os.path.join(save_dir, "dict", "{}.pkl".format(file_index), "wb") as f:
+        with open(os.path.join(save_dir, "dict", "{}.pkl".format(file_index)), "wb") as f:
             pickle.dump(record, f)
             f.close()
 
