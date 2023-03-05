@@ -94,7 +94,7 @@ coco_categories_objects = ["chair", "couch", "potted plant", "bed", "toilet", "t
 
 
 master_scene_dir = "/home/xinranliang/projects/interactive-robustness/sem-exp/data/scene_datasets/gibson_semantics/"
-master_save_dir = '/home/xinranliang/projects/sem-exp/logs/2023-03-04/eval_pretrain/rollouts/'
+master_save_dir = '/home/xinranliang/projects/sem-exp/logs/2023-03-04/pretrain_rollouts/'
 master_model_dir = '/home/xinranliang/projects/interactive-robustness/seal/models/'
 
 def get_all_coco_categories():
@@ -107,6 +107,17 @@ def get_habitat_dicts(scene_str, max_frames=1000):
     dataset_dicts = []
     for idx in range(max_frames):
         with open(master_save_dir + "%s/dict/%s_%03d.pkl" % (scene_str, scene_str, idx), 'rb') as f:
+            dict_obj = pickle.load(f)
+            for single_object in dict_obj['annotations']:
+                simple_catid = single_object['category_id']
+                single_object['category_id'] = coco_categories_mapping[simple_catid]
+        dataset_dicts.append(dict_obj)
+    return dataset_dicts
+
+def get_habitat_dicts_temp(scene_str):
+    dataset_dicts = []
+    for file_name in os.listdir(os.path.join(master_save_dir, "%s/dict" % (scene_str)))[:100]:
+        with open(os.path.join(master_save_dir, "%s/dict" % (scene_str), file_name), 'rb') as f:
             dict_obj = pickle.load(f)
             for single_object in dict_obj['annotations']:
                 simple_catid = single_object['category_id']
@@ -149,19 +160,19 @@ def main_train():
 def main_small():
     coco_objects = get_all_coco_categories()
 
-    for scene_name in ["Allensville", "Forkland"]:
-        DatasetCatalog.register("habitat_" + scene_name, lambda scene_name=scene_name: get_habitat_dicts(scene_name, max_frames=40))
+    for scene_name in scenes["train"]:
+        DatasetCatalog.register("habitat_" + scene_name, lambda scene_name=scene_name: get_habitat_dicts_temp(scene_name))
         MetadataCatalog.get("habitat_" + scene_name).set(thing_classes=coco_objects)
     
-    for scene_name in ["Allensville", "Forkland"]:
+    for scene_name in scenes["train"]:
         habitat_metadata = MetadataCatalog.get("haitat_" + scene_name)
-        dataset_dicts = get_habitat_dicts(scene_name, max_frames=40)
+        dataset_dicts = get_habitat_dicts_temp(scene_name)
         for d in dataset_dicts:
             img = cv2.imread(d["file_name"])
             visualizer = Visualizer(img[:, :, ::-1], metadata=habitat_metadata, scale=1)
             out = visualizer.draw_dataset_dict(d)
             os.makedirs(master_save_dir + scene_name + '/label/', exist_ok=True)
-            cv2.imwrite(master_save_dir + scene_name + '/label/' + d['image_id'].split('_')[1] + '.png', out.get_image()[:, :, ::-1])
+            cv2.imwrite(master_save_dir + scene_name + '/label/' + d['image_id'] + '.png', out.get_image()[:, :, ::-1])
 
 
 if __name__ == "__main__":

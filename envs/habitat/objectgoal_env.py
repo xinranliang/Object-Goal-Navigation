@@ -562,8 +562,8 @@ class ObjectGoal_Env(habitat.RLEnv):
         file_index = "ep%02d_t%03d_num%05d" % (self.episode_no, self.timestep, self.num_viz)
         record["file_name"] = os.path.join(save_dir, "rgb", "{}.png".format(file_index))
         record["image_id"] = idx
-        record["height"] = self.args.frame_height
-        record["width"] = self.args.frame_width
+        record["height"] = self.args.env_frame_height
+        record["width"] = self.args.env_frame_width
 
         # save RGB
         color_img = Image.fromarray(obs_rgb, mode="RGB")
